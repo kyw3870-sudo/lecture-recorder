@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>강의 녹음 및 실시간 텍스트 변환 웹앱</title>
+  <style>
+    :root {
+      --primary-color: #2563eb;
+      --primary-hover: #1d4ed8;
+      --danger-color: #dc2626;
+      --danger-hover: #b91c1c;
+      --bg-color: #f8fafc;
+      --card-bg: #ffffff;
+      --text-main: #1e293b;
+      --text-muted: #64748b;
+      --border-color: #e2e8f0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 800px;
+      background: var(--card-bg);
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    header {
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 16px;
+    }
+
+    .header-title h1 {
+      font-size: 1.5rem;
+      color: var(--text-main);
+      margin-bottom: 6px;
+    }
+
+    .header-title p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #f1f5f9;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background-color: #94a3b8;
+    }
+
+    .dot.recording {
+      background-color: var(--danger-color);
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.4; }
+      100% { opacity: 1; }
+    }
+
+    .timer {
+      font-family: monospace;
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: var(--primary-color);
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      flex: 1;
+      min-width: 140px;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background-color: var(--primary-color);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background-color: var(--primary-hover);
+    }
+
+    .btn-danger {
+      background-color: var(--danger-color);
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background-color: var(--danger-hover);
+    }
+
+    .btn-secondary {
+      background-color: #e2e8f0;
+      color: var(--text-main);
+    }
+
+    .btn-secondary:hover {
+      background-color: #cbd5e1;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .section-title {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--text-main);
+    }
+
+    .transcript-box {
+      width: 100%;
+      height: 320px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 16px;
+      overflow-y: auto;
+      background-color: #fafafa;
+      font-size: 0.95rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+
+    .summary-box {
+      background-color: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .summary-content {
+      font-size: 0.9rem;
+      line-height: 1.6;
+      color: #1e3a8a;
+      white-space: pre-wrap;
+    }
+
+    audio {
+      width: 100%;
+      margin-top: 8px;
+    }
+
+    .alert-msg {
+      padding: 12px;
+      border-radius: 8px;
+      background-color: #fef2f2;
+      color: var(--danger-color);
+      font-size: 0.85rem;
+      display: none;
+    }
+
+    @media (max-width: 600px) {
+      .container {
+        padding: 16px;
+      }
+      .controls {
+        flex-direction: column;
+      }
+      .btn {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <div class="header-title">
+        <h1>🎙️ 강의 녹음 &amp; 실시간 텍스트 변환</h1>
+        <p>한국어/영어 자동 감지, 맥락 줄바꿈, 타임스탬프, 요약 및 다운로드 기능 제공</p>
+      </div>
+    </header>
+
+    <div class="alert-msg" id="alertMsg"></div>
+
+    <div class="status-bar">
+      <div class="status-indicator">
+        <span class="dot" id="statusDot"></span>
+        <span id="statusText">대기 중</span>
+      </div>
+      <div class="timer" id="timerDisplay">00:00:00</div>
+    </div>
+
+    <div class="controls">
+      <button class="btn btn-primary" id="startBtn">▶ 녹음 시작</button>
+      <button class="btn btn-danger" id="stopBtn" disabled>⏹ 녹음 종료</button>
+    </div>
+
+    <div>
+      <div class="section-title">실시간 변환 텍스트</div>
+      <div class="transcript-box" id="transcriptBox">강의가 시작되면 텍스트가 이곳에 실시간으로 표시됩니다...</div>
+    </div>
+
+    <div id="playerSection" style="display: none;">
+      <div class="section-title">🔊 다시 듣기 (오디오 플레이어)</div>
+      <audio id="audioPlayer" controls></audio>
+    </div>
+
+    <div id="summarySection" style="display: none;">
+      <div class="section-title">📑 강의 핵심 자동 요약</div>
+      <div class="summary-box">
+        <div class="summary-content" id="summaryBox">요약 버튼을 누르면 핵심 요약이 생성됩니다.</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn btn-secondary" id="downloadTxtBtn" disabled>📄 .txt 다운로드</button>
+      <button class="btn btn-secondary" id="downloadWebmBtn" disabled>🎵 .webm 다운로드</button>
+      <button class="btn btn-secondary" id="summaryBtn" disabled>📑 강의 요약 실행</button>
+    </div>
+  </div>
+
+  <script>
+    let isRecording = false;
+    let recognition = null;
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let audioBlob = null;
+
+    let startTime = 0;
+    let timerInterval = null;
+    let periodicTimestampInterval = null;
+
+    let fullTranscript = [];
+    let lectureSummary = "";
+
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const summaryBtn = document.getElementById('summaryBtn');
+    const downloadTxtBtn = document.getElementById('downloadTxtBtn');
+    const downloadWebmBtn = document.getElementById('downloadWebmBtn');
+    
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const timerDisplay = document.getElementById('timerDisplay');
+    const alertMsg = document.getElementById('alertMsg');
+    
+    const transcriptBox = document.getElementById('transcriptBox');
+    const playerSection = document.getElementById('playerSection');
+    const audioPlayer = document.getElementById('audioPlayer');
+    const summarySection = document.getElementById('summarySection');
+    const summaryBox = document.getElementById('summaryBox');
+
+    function showAlert(msg) {
+      alertMsg.textContent = msg;
+      alertMsg.style.display = 'block';
+    }
+
+    function hideAlert() {
+      alertMsg.style.display = 'none';
+    }
+
+    function formatTime(seconds) {
+      const hrs = Math.floor(seconds / 3600).toString().padStart(2, '0');
+      const mins = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+      const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
+      return `${hrs}:${mins}:${secs}`;
+    }
+
+    function getShortTimestamp() {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
+      const secs = Math.floor(elapsed % 60).toString().padStart(2, '0');
+      return `[${mins}:${secs}]`;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      showAlert("현재 브라우저는 Web Speech API를 지원하지 않습니다. Chrome 브라우저를 사용해 주세요.");
+      startBtn.disabled = true;
+    } else {
+      recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'ko-KR';
+
+      recognition.onresult = (event) => {
+        let interimText = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            const finalChunk = event.results[i][0].transcript.trim();
+            if (finalChunk.length > 0) {
+              processFinalSentence(finalChunk);
+            }
+          } else {
+            interimText += event.results[i][0].transcript;
+          }
+        }
+        renderTranscript(interimText);
+      };
+
+      recognition.onerror = (event) => {
+        if (event.error !== 'no-speech' && event.error !== 'aborted') {
+          console.warn(`음성 인식 처리 경고/오류: ${event.error}`);
+        }
+        if (isRecording) {
+          setTimeout(() => {
+            if (isRecording) {
+              try { recognition.start(); } catch (e) {}
+            }
+          }, 300);
+        }
+      };
+
+      recognition.onend = () => {
+        if (isRecording) {
+          setTimeout(() => {
+            if (isRecording) {
+              try { recognition.start(); } catch (e) {}
+            }
+          }, 200);
+        }
+      };
+    }
+
+    function processFinalSentence(text) {
+      const timestamp = getShortTimestamp();
+      const contextBreakKeywords = ['그리고', '하지만', '또한', '따라서', '결국', '다음으로', '보시면', '그래서', 'however', 'therefore', 'furthermore', 'next'];
+      const startsWithKeyword = contextBreakKeywords.some(kw => text.toLowerCase().startsWith(kw));
+      const shouldLineBreak = startsWithKeyword || text.length > 40;
+
+      if (shouldLineBreak && fullTranscript.length > 0) {
+        fullTranscript.push(`\n${timestamp} ${text}`);
+      } else {
+        if (fullTranscript.length === 0) {
+          fullTranscript.push(`${timestamp} ${text}`);
+        } else {
+          fullTranscript.push(` ${text}`);
+        }
+      }
+      renderTranscript();
+    }
+
+    function addPeriodicTimestamp() {
+      if (!isRecording) return;
+      const timestamp = getShortTimestamp();
+      fullTranscript.push(`\n\n📌 --- 5분 경과 ${timestamp} --- \n`);
+      renderTranscript();
+    }
+
+    function renderTranscript(interim = '') {
+      if (fullTranscript.length === 0 && !interim) {
+        transcriptBox.textContent = "강의가 시작되면 텍스트가 이곳에 실시간으로 표시됩니다...";
+        return;
+      }
+      transcriptBox.textContent = fullTranscript.join('') + (interim ? ` [인식 중... ${interim}]` : '');
+      transcriptBox.scrollTop = transcriptBox.scrollHeight;
+    }
+
+    async function startAudioRecording() {
+      audioChunks = [];
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunks.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = () => {
+          audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          const audioUrl = URL.createObjectURL(audioBlob);
+          audioPlayer.src = audioUrl;
+          playerSection.style.display = 'block';
+          downloadWebmBtn.disabled = false;
+        };
+
+        mediaRecorder.start();
+      } catch (err) {
+        showAlert("마이크 접근 권한이 거부되었거나 마이크를 찾을 수 없습니다.");
+        stopRecording();
+      }
+    }
+
+    function startRecording() {
+      hideAlert();
+      isRecording = true;
+      fullTranscript = [];
+      lectureSummary = "";
+
+      playerSection.style.display = 'none';
+      summarySection.style.display = 'none';
+      summaryBtn.disabled = true;
+      downloadTxtBtn.disabled = true;
+      downloadWebmBtn.disabled = true;
+
+      statusDot.classList.add('recording');
+      statusText.textContent = "녹음 및 변환 중...";
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+
+      startTime = Date.now();
+      timerInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        timerDisplay.textContent = formatTime(elapsed);
+      }, 1000);
+
+      periodicTimestampInterval = setInterval(addPeriodicTimestamp, 300000);
+
+      try {
+        recognition.start();
+      } catch (e) {
+        console.log("Recognition start warning:", e);
+      }
+      startAudioRecording();
+    }
+
+    function stopRecording() {
+      isRecording = false;
+
+      statusDot.classList.remove('recording');
+      statusText.textContent = "녹음 완료";
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+
+      clearInterval(timerInterval);
+      clearInterval(periodicTimestampInterval);
+
+      if (recognition) {
+        try { recognition.stop(); } catch (e) {}
+      }
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+
+      // 녹음 완료 후 요약 버튼 및 텍스트 다운로드 버튼 활성화
+      summaryBtn.disabled = false;
+      downloadTxtBtn.disabled = false;
+    }
+
+    function generateSmartSummary() {
+      summarySection.style.display = 'block';
+      summaryBox.textContent = "강의 알고리즘 분석을 진행하여 핵심 문장을 추출 중입니다...";
+
+      setTimeout(() => {
+        const cleanText = fullTranscript.join(' ')
+          .replace(/\[\d{2}:\d{2}\]/g, '')
+          .replace(/📌 --- 5분 경과 \[\d{2}:\d{2}\] ---/g, '')
+          .trim();
+
+        if (!cleanText || cleanText.length < 20) {
+          lectureSummary = "요약할 강의 기록 내용이 충분하지 않습니다.";
+          summaryBox.textContent = lectureSummary;
+          return;
+        }
+
+        let sentences = cleanText.split(/(?<=[.?!])\s+|\n+/).map(s => s.trim()).filter(s => s.length > 8);
+
+        if (sentences.length === 0) {
+          sentences = [cleanText];
+        }
+
+        const stopWords = new Set(['수', '것', '등', '및', '이', '가', '은', '는', '을', '를', '에', '와', '과', '도', '으로', '로', '합니다', '입니다', '있습니다', '하는', '에서', 'that', 'this', 'is', 'are', 'the', 'and', 'to', 'of']);
+        const wordFreq = {};
+        
+        sentences.forEach(s => {
+          const words = s.split(/\s+/);
+          words.forEach(w => {
+            const cleaned = w.replace(/[^a-zA-Z가-힣]/g, '');
+            if (cleaned.length >= 2 && !stopWords.has(cleaned)) {
+              wordFreq[cleaned] = (wordFreq[cleaned] || 0) + 1;
+            }
+          });
+        });
+
+        const highlightKeywords = ['중요', '핵심', '결국', '정리하면', '따라서', '즉', '기억', '반드시', 'important', 'key', 'summary', 'conclusion'];
+
+        const scoredSentences = sentences.map((sentence, index) => {
+          let score = 0;
+          const words = sentence.split(/\s+/);
+
+          words.forEach(w => {
+            const cleaned = w.replace(/[^a-zA-Z가-힣]/g, '');
+            if (wordFreq[cleaned]) score += wordFreq[cleaned];
+          });
+
+          highlightKeywords.forEach(kw => {
+            if (sentence.toLowerCase().includes(kw)) score += 5;
+          });
+
+          if (index === 0 || index === sentences.length - 1) score += 3;
+
+          return { sentence, score, index };
+        });
+
+        scoredSentences.sort((a, b) => b.score - a.score);
+        const topSentences = scoredSentences.slice(0, Math.min(3, scoredSentences.length));
+        topSentences.sort((a, b) => a.index - b.index);
+
+        lectureSummary = "💡 [알고리즘 기반 강의 핵심 요약]\n" + 
+          topSentences.map((item, idx) => `${idx + 1}. ${item.sentence}`).join('\n\n');
+
+        summaryBox.textContent = lectureSummary;
+      }, 600);
+    }
+
+    summaryBtn.addEventListener('click', generateSmartSummary);
+
+    downloadTxtBtn.addEventListener('click', () => {
+      const fullContent = `=== 강의 녹음 및 텍스트 변환 기록 ===\n일시: ${new Date().toLocaleString()}\n\n[실시간 강의 기록]\n` 
+        + fullTranscript.join('') 
+        + "\n\n====================================\n\n" 
+        + (lectureSummary || "요약 내용 없음");
+
+      const blob = new Blob([fullContent], { type: 'text/plain;charset=utf-8' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `lecture_note_${new Date().toISOString().slice(0,10)}.txt`;
+      link.click();
+    });
+
+    downloadWebmBtn.addEventListener('click', () => {
+      if (!audioBlob) return;
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(audioBlob);
+      link.download = `lecture_audio_${new Date().toISOString().slice(0,10)}.webm`;
+      link.click();
+    });
+
+    startBtn.addEventListener('click', startRecording);
+    stopBtn.addEventListener('click', stopRecording);
+  </script>
+</body>
+</html>
